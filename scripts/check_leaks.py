@@ -15,9 +15,23 @@ import polars as pl
 from features.engine import ENTITIES, INF, PROC, STATS, compute, load_rows, parse
 from features.handcrafted import HANDCRAFTED
 
-N = 300
+import argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--specs", default="", help="txt-файл с признаками (по умолчанию ручной набор)")
+ap.add_argument("--n", type=int, default=300)
+ap.add_argument("--grammar", type=int, default=0, help="проверить K случайных кандидатов из грамматики автопоиска")
+a = ap.parse_args()
+SPECS = [l.strip() for l in open(a.specs, encoding="utf-8") if l.strip()] if a.specs else HANDCRAFTED
+if a.grammar:
+    import random
+
+    from features.grammar import all_candidates
+    pool = [x for v in all_candidates().values() for x in v]
+    SPECS = random.Random(0).sample(pool, a.grammar)
+N = a.n
 rows = load_rows().sample(N, seed=1)
-eng = compute(HANDCRAFTED, rows)
+eng = compute(SPECS, rows)
 # читаем только события, которые относятся к выбранным показам (пользователи, треки, артисты, альбомы)
 ev = pl.scan_parquet(PROC / "events.parquet").filter(
     pl.col("uid").is_in(rows["uid"].unique().implode())
@@ -53,6 +67,17 @@ def brute(spec, r, sub_all):
         return None if sub.is_empty() else float(d - sub["day"].max())
     if f["kind"] == "age":
         return None if sub.is_empty() else float(d - sub["day"].min())
+    def wsum(frame, w, st):
+        win = frame if w == INF else frame.filter(pl.col("day") >= d - w)
+        return float(win[f"_{st}"].sum())
+
+    def rate(frame, w):
+        num, den = wsum(frame, w, f["stats"][0]), wsum(frame, w, f["stats"][1])
+        return num / den if den > 0 else None
+
+    if f["kind"] in ("drift", "lift"):
+        a_, b_ = (rate(sub, f["w"][0]), rate(sub, f["w"][1])) if f["kind"] == "drift" else (rate(sub, f["w"]), rate(sub_all["u"], f["w"]))
+        return None if a_ is None or b_ is None else a_ - b_
     w = f["w"]
     win = sub if w == INF else sub.filter(pl.col("day") >= d - w)
     sm = [float(win[f"_{s}"].sum()) for s in f["stats"]]
@@ -72,7 +97,7 @@ eng_rows = {r["imp_id"]: r for r in eng.iter_rows(named=True)}
 for i, r in enumerate(rows.iter_rows(named=True)):
     e = eng_rows[r["imp_id"]]
     sub_all = subsets(r)
-    for spec in HANDCRAFTED:
+    for spec in SPECS:
         b, v = brute(spec, r, sub_all), e[spec]
         ok = (b is None and v is None) or (b is not None and v is not None and abs(b - v) <= 1e-3 * max(1, abs(b)))
         if not ok:
@@ -81,6 +106,6 @@ for i, r in enumerate(rows.iter_rows(named=True)):
                 print(f"РАСХОЖДЕНИЕ imp_id={r['imp_id']} {spec}: движок={v} в лоб={b}")
     if i % 50 == 0:
         print(f"проверено показов: {i}")
-print(f"\nпроверено {N} показов x {len(HANDCRAFTED)} признаков, расхождений: {bad}")
+print(f"\nпроверено {N} показов x {len(SPECS)} признаков, расхождений: {bad}")
 assert bad == 0
 print("Движок совпадает с расчётом в лоб: утечек нет.")

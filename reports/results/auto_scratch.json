@@ -1,0 +1,39 @@
+{
+  "name": "auto_scratch",
+  "objective": "binary",
+  "set": "selected_scratch",
+  "n_features": 18,
+  "drop": [],
+  "n_train": 5523724,
+  "feature_seconds": 48.0122013092041,
+  "train_seconds": 60.80618906021118,
+  "best_iter": 205,
+  "params": {
+    "objective": "binary",
+    "learning_rate": 0.05,
+    "num_leaves": 127,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l2": 1.0,
+    "max_bin": 255,
+    "verbose": -1,
+    "seed": 42,
+    "num_threads": 4
+  },
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.45060503842917715,
+    "auc": 0.8340546318714286,
+    "groups_mixed": 15629,
+    "gauc": 0.5740111241120954,
+    "gauc_w": 0.5866734462961082,
+    "ndcg@5": 0.7401223657127588,
+    "skip@5": 0.29846165951921944,
+    "ndcg@10": 0.7628701859892267,
+    "skip@10": 0.30546467107553077,
+    "predict_seconds": 2.3088417053222656
+  }
+}

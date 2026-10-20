@@ -15,4 +15,7 @@ python scripts/build_cache.py             # накопительные табл�
 python train/gbdt.py --name hand          # ручные признаки + LightGBM
 python scripts/check_leaks.py             # сверка движка признаков с расчётом «в лоб»
 python scripts/baselines.py               # эвристики без обучения
+.\scripts\run_day2.ps1                     # lambdarank + абляции групп
+.\scripts\run_day2b.ps1                    # шум от seed + интервалы (scripts/compare.py)
+.\scripts\run_day3.ps1                     # автопоиск признаков (search/autofe.py)
 ```

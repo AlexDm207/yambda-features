@@ -8,3 +8,4 @@ checkpoints/
 !reports/**/*.parquet
 reports/results/*.lgb
 reports/preds/
+features/_engine_new.py

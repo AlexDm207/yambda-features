@@ -137,8 +137,11 @@ def parse(spec: str) -> dict:
         return {"kind": kind, "name": p[1]}
     if kind in ("recency", "age"):
         return {"kind": kind, "ent": p[1]}
-    w = INF if p[3] == "inf" else int(p[3])
     stats = p[2].split("/")
+    if kind == "drift":  # rate за короткое окно минус rate за длинное: «меняется ли поведение»
+        w1, w2 = [INF if x == "inf" else int(x) for x in p[3].split("-")]
+        return {"kind": kind, "ent": p[1], "stats": stats, "w": (w1, w2)}
+    w = INF if p[3] == "inf" else int(p[3])
     return {"kind": kind, "ent": p[1], "stats": stats, "w": w}
 
 
@@ -148,11 +151,15 @@ def _needs(specs: list[str]):
     rec = set()
     for s in specs:
         f = parse(s)
-        if f["kind"] in ("sum", "rate", "share"):
+        if f["kind"] in ("sum", "rate", "share", "lift"):
             for st in f["stats"]:
                 need[f["ent"]][f["w"]].add(st)
-                if f["kind"] == "share":  # знаменатель — та же статистика пользователя
+                if f["kind"] in ("share", "lift"):  # нужна та же статистика пользователя
                     need["u"][f["w"]].add(st)
+        elif f["kind"] == "drift":
+            for w in f["w"]:
+                for st in f["stats"]:
+                    need[f["ent"]][w].add(st)
         elif f["kind"] in ("recency", "age"):
             rec.add((f["kind"], f["ent"]))
     return need, rec
@@ -220,7 +227,7 @@ def _compute_chunk(specs: list[str], rows: pl.DataFrame, bucket: int) -> pl.Data
         q = q.drop([c for c in q.columns if c.startswith("_end_")] + ["_t"])
         if ent == "u":
             uq = q
-        if any(parse(s)["kind"] == "share" for s in by_ent[ent]):
+        if ent != "u" and any(parse(s)["kind"] in ("share", "lift") for s in by_ent[ent]):
             q = q.join(uq.select(["uid", "day"] + [c for c in uq.columns if c.startswith("_u_")]), on=["uid", "day"], how="left")
         # сразу сворачиваем промежуточные колонки в итоговые признаки: экономит память
         q = q.select(keys + ["day"] + [_final(s) for s in by_ent[ent]])
@@ -251,9 +258,20 @@ def _final(s: str) -> pl.Expr:
         num = pl.col(_col(f["ent"], f["stats"][0], f["w"])).cast(pl.Float32).fill_null(0)
         den = pl.col(_col("u", f["stats"][0], f["w"])).cast(pl.Float32).fill_null(0)
         e = pl.when(den > 0).then(num / den)
+    elif k == "drift":
+        w1, w2 = f["w"]
+        e = _rate(f["ent"], *f["stats"], w1) - _rate(f["ent"], *f["stats"], w2)
+    elif k == "lift":  # насколько пользователь дослушивает этого артиста/трек лучше своего среднего
+        e = _rate(f["ent"], *f["stats"], f["w"]) - _rate("u", *f["stats"], f["w"])
     else:
         raise ValueError(s)
     return e.alias(s)
+
+
+def _rate(ent, num, den, w):
+    n = pl.col(_col(ent, num, w)).cast(pl.Float32).fill_null(0)
+    d = pl.col(_col(ent, den, w)).cast(pl.Float32).fill_null(0)
+    return pl.when(d > 0).then(n / d)
 
 
 def load_rows(splits=("train", "val", "test")) -> pl.DataFrame:
