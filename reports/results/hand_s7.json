@@ -1,0 +1,39 @@
+{
+  "name": "hand_s7",
+  "objective": "binary",
+  "set": "handcrafted",
+  "n_features": 65,
+  "drop": [],
+  "n_train": 5523724,
+  "feature_seconds": 61.093640089035034,
+  "train_seconds": 157.6228904724121,
+  "best_iter": 316,
+  "params": {
+    "objective": "binary",
+    "learning_rate": 0.05,
+    "num_leaves": 127,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l2": 1.0,
+    "max_bin": 255,
+    "verbose": -1,
+    "seed": 7,
+    "num_threads": 4
+  },
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.4470103456953116,
+    "auc": 0.8372029356086735,
+    "groups_mixed": 15629,
+    "gauc": 0.5777083908592419,
+    "gauc_w": 0.591109832311797,
+    "ndcg@5": 0.7441820428861825,
+    "skip@5": 0.2938059828723558,
+    "ndcg@10": 0.7664006180505891,
+    "skip@10": 0.3024852071005917,
+    "predict_seconds": 3.5643272399902344
+  }
+}

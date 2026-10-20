@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+data/raw/
+data/processed/
+data/features/
+checkpoints/
+*.parquet
+!reports/**/*.parquet
+reports/results/*.lgb
+reports/preds/

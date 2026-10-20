@@ -1,0 +1,9 @@
+polars>=1.30
+pyarrow
+numpy
+pyyaml
+scikit-learn
+lightgbm>=4.3
+matplotlib
+huggingface_hub
+# torch ставится отдельно под CUDA: pip install torch --index-url https://download.pytorch.org/whl/cu124

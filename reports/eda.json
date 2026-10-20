@@ -1,0 +1,95 @@
+{
+  "seen_item": [
+    {
+      "split": "train",
+      "seen_item": false,
+      "n": 2078266,
+      "pos": 0.6371580923712364
+    },
+    {
+      "split": "train",
+      "seen_item": true,
+      "n": 3445458,
+      "pos": 0.7028557596696868
+    },
+    {
+      "split": "val",
+      "seen_item": false,
+      "n": 300386,
+      "pos": 0.6497872737078293
+    },
+    {
+      "split": "val",
+      "seen_item": true,
+      "n": 434084,
+      "pos": 0.7215999668266971
+    },
+    {
+      "split": "test",
+      "seen_item": false,
+      "n": 294106,
+      "pos": 0.6733082630072151
+    },
+    {
+      "split": "test",
+      "seen_item": true,
+      "n": 431799,
+      "pos": 0.7293254500357805
+    }
+  ],
+  "seen_artist": [
+    {
+      "split": "train",
+      "seen_artist": false,
+      "n": 928175,
+      "pos": 0.6053384329463732
+    },
+    {
+      "split": "train",
+      "seen_artist": true,
+      "n": 4595549,
+      "pos": 0.6928408335979009
+    },
+    {
+      "split": "val",
+      "seen_artist": false,
+      "n": 135396,
+      "pos": 0.6246344057431534
+    },
+    {
+      "split": "val",
+      "seen_artist": true,
+      "n": 599074,
+      "pos": 0.7075069190116747
+    },
+    {
+      "split": "test",
+      "seen_artist": false,
+      "n": 134750,
+      "pos": 0.6520445269016698
+    },
+    {
+      "split": "test",
+      "seen_artist": true,
+      "n": 591155,
+      "pos": 0.7190719861965136
+    }
+  ],
+  "cold_item": [
+    {
+      "split": "test",
+      "share_cold_item": 0.010355349529208368
+    },
+    {
+      "split": "train",
+      "share_cold_item": 0.012421692322063882
+    },
+    {
+      "split": "val",
+      "share_cold_item": 0.012829659482347815
+    }
+  ],
+  "std_uid": 0.2717828587116652,
+  "std_item_id": 0.15538590034159336,
+  "std_artist_id": 0.15773362569725158
+}
