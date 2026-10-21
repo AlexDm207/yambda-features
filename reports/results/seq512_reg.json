@@ -1,0 +1,42 @@
+{
+  "name": "seq512_reg",
+  "objective": "transformer",
+  "n_features": 0,
+  "args": {
+    "name": "seq512_reg",
+    "L": 512,
+    "C": 64,
+    "d": 128,
+    "layers": 2,
+    "epochs": 2,
+    "bs": 64,
+    "lr": 0.001,
+    "train_last_days": 0,
+    "seed": 42,
+    "test": false,
+    "eval_only": false,
+    "throttle": 0.05,
+    "threads": 2,
+    "retrieve": 0,
+    "dropout": 0.2,
+    "wd": 0.05,
+    "shuffle_train_labels": false
+  },
+  "feature_seconds": 3.39963436126709,
+  "best_epoch": 0,
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.4600509848627266,
+    "auc": 0.8264431826422061,
+    "groups_mixed": 15629,
+    "gauc": 0.5430931074981803,
+    "gauc_w": 0.5554288741438194,
+    "ndcg@5": 0.7085082634904797,
+    "skip@5": 0.3249400007868749,
+    "ndcg@10": 0.7356090058278473,
+    "skip@10": 0.3255134006265228
+  },
+  "train_seconds": 845.7652409076691,
+  "gpu_mem_gb": 1.087349248
+}

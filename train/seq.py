@@ -4,6 +4,7 @@
   python train/seq.py --name seq                 # L=256
   python train/seq.py --name seq_L64 --L 64      # короче история: как качество зависит от её длины
   python train/seq.py --name seq --test --eval_only   # посчитать test лучшим чекпойнтом
+  python train/seq.py --name seqret --retrieve 32  # + поиск по всей истории (трек и артист кандидата)
 """
 import argparse
 import json
@@ -36,6 +37,9 @@ ap.add_argument("--test", action="store_true")
 ap.add_argument("--eval_only", action="store_true")
 ap.add_argument("--throttle", type=float, default=0.0, help="пауза после каждого шага, с (снижает нагрев)")
 ap.add_argument("--threads", type=int, default=2, help="потоки CPU для torch")
+ap.add_argument("--retrieve", type=int, default=0, help="K событий с тем же треком/артистом из всей истории (0 = выкл.)")
+ap.add_argument("--dropout", type=float, default=0.1)
+ap.add_argument("--wd", type=float, default=0.01, help="weight decay")
 ap.add_argument("--shuffle_train_labels", action="store_true",
                 help="проверка на утечку: метки train перемешаны -> на val должно быть GAUC ~ 0.5")
 args = ap.parse_args()
@@ -51,6 +55,9 @@ meta = json.load(open(ROOT / "data/seq/meta.json"))
 if args.shuffle_train_labels:
     tm = K["split"] == 0
     K["label"][tm] = rng.permutation(K["label"][tm])
+if args.retrieve:
+    R = dict(np.load(ROOT / "data/seq/retrieval.npz"))
+    KR = dict(np.load(ROOT / "data/seq/cands_raw.npz"))
 AGO_EDGES = np.array([2, 3, 4, 8, 15, 31, 61, 121, 181, 241])  # дней назад -> корзина 1..11
 
 
@@ -91,14 +98,37 @@ def batch(idx, S):
     t = lambda a, dt=torch.long: torch.from_numpy(np.ascontiguousarray(a)).to(dev, dt, non_blocking=True)
     h = [t(np.where(hm, E[k][hi], 0)) for k in ("item", "art", "ecode", "org")] + [t(np.where(hm, ago, 0))]
     cand = [t(np.where(cm, K["item"][ci], 0)), t(np.where(cm, K["art"][ci], 0)), t(K["loglen"][ci], torch.float32)]
+    if args.retrieve:
+        cand.append([retrieve(ci, cm, kind, t) for kind in ("item", "art")])
     return h, cand, t(K["label"][ci], torch.float32), t(cm, torch.bool), ci, cm
+
+
+def retrieve(ci, cm, kind, t):
+    """Последние K событий пользователя с тем же треком/артистом, строго до дня показа, из всей истории."""
+    Kr = args.retrieve
+    obj = KR[kind][ci]
+    ok = cm & (obj > 0)
+    d = K["day"][ci].astype(np.int64)
+    base = ((K["u"][ci].astype(np.int64) << 24) | obj) * 512
+    keys = R[f"key_{kind}"]
+    lo = np.searchsorted(keys, base, "left")
+    hi = np.searchsorted(keys, base + d, "left")  # ключ (u, объект, день) < (u, объект, d): только прошлые дни
+    hi = np.where(ok, hi, lo)
+    idx = hi[..., None] - Kr + np.arange(Kr)
+    m = idx >= lo[..., None]
+    ev = R[f"ord_{kind}"][np.where(m, idx, 0)]
+    ago = np.digitize(d[..., None] - E["day"][ev], AGO_EDGES) + 1
+    cnt = np.minimum(np.floor(np.log2(hi - lo + 1)).astype(np.int64), 17)
+    z = lambda a: t(np.where(m, a, 0))
+    return [z(E["item"][ev]), z(E["art"][ev]), z(E["ecode"][ev]), z(E["org"][ev]), z(ago), t(m, torch.bool), t(cnt)]
 
 
 S = {"train": make_samples(0, args.train_last_days), "val": make_samples(1), "test": make_samples(2)}
 t_prep = time.time() - t_prep
 print(f"примеров: train {len(S['train'][0]):,}, val {len(S['val'][0]):,}; подготовка {t_prep:.0f} с; устройство {dev}")
 
-model = SeqRanker(meta["V_ITEM"], meta["V_ART"], d=args.d, L=args.L, layers=args.layers).to(dev)
+model = SeqRanker(meta["V_ITEM"], meta["V_ART"], d=args.d, L=args.L, layers=args.layers,
+                  dropout=args.dropout, retrieve=args.retrieve > 0).to(dev)
 print(f"параметров: {sum(p.numel() for p in model.parameters()) / 1e6:.1f} млн")
 ckpt = ROOT / f"checkpoints/{args.name}.pt"
 ckpt.parent.mkdir(exist_ok=True)
@@ -109,8 +139,9 @@ def predict(split):
     model.eval()
     Sp = S[split]
     out = np.zeros(len(K["imp_id"]), dtype=np.float32)
-    for i in range(0, len(Sp[0]), 256):
-        idx = np.arange(i, min(i + 256, len(Sp[0])))
+    pb = 64 if args.retrieve else 256
+    for i in range(0, len(Sp[0]), pb):
+        idx = np.arange(i, min(i + pb, len(Sp[0])))
         h, cand, _, _, ci, cm = batch(idx, Sp)
         with torch.autocast(dev, dtype=torch.float16, enabled=dev == "cuda"):
             p = torch.sigmoid(model(*h, *cand).float()).cpu().numpy()
@@ -126,7 +157,7 @@ def score(split, pred):
 
 res = {"name": args.name, "objective": "transformer", "n_features": 0, "args": vars(args), "feature_seconds": t_prep}
 if not args.eval_only:
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
     n_steps = args.epochs * (len(S["train"][0]) // args.bs)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, args.lr, total_steps=n_steps, pct_start=0.05)
     scaler = torch.amp.GradScaler(enabled=dev == "cuda")

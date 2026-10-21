@@ -1,0 +1,42 @@
+{
+  "name": "seqret_shuf",
+  "objective": "transformer",
+  "n_features": 0,
+  "args": {
+    "name": "seqret_shuf",
+    "L": 256,
+    "C": 64,
+    "d": 128,
+    "layers": 2,
+    "epochs": 1,
+    "bs": 64,
+    "lr": 0.001,
+    "train_last_days": 0,
+    "seed": 42,
+    "test": false,
+    "eval_only": false,
+    "throttle": 0.05,
+    "threads": 2,
+    "retrieve": 32,
+    "dropout": 0.1,
+    "wd": 0.01,
+    "shuffle_train_labels": true
+  },
+  "feature_seconds": 3.8311524391174316,
+  "best_epoch": 0,
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.6179729305058713,
+    "auc": 0.49136806387613186,
+    "groups_mixed": 15629,
+    "gauc": 0.49420022105486333,
+    "gauc_w": 0.4939249817554546,
+    "ndcg@5": 0.6718868814379454,
+    "skip@5": 0.35836907056956635,
+    "ndcg@10": 0.7055747026655442,
+    "skip@10": 0.34994082840236684
+  },
+  "train_seconds": 547.1325407028198,
+  "gpu_mem_gb": 1.071136768
+}
