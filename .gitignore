@@ -9,3 +9,5 @@ checkpoints/
 reports/results/*.lgb
 reports/preds/
 features/_engine_new.py
+search/_autofe_new.py
+data/seq/

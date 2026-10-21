@@ -1,0 +1,39 @@
+{
+  "name": "auto_hand_g",
+  "objective": "binary",
+  "set": "selected_hand_fam_gauc",
+  "n_features": 69,
+  "drop": [],
+  "n_train": 5523724,
+  "feature_seconds": 83.78617024421692,
+  "train_seconds": 319.7762715816498,
+  "best_iter": 347,
+  "params": {
+    "objective": "binary",
+    "learning_rate": 0.05,
+    "num_leaves": 127,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l2": 1.0,
+    "max_bin": 255,
+    "verbose": -1,
+    "seed": 42,
+    "num_threads": 2
+  },
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.4469460587613656,
+    "auc": 0.8372061234455214,
+    "groups_mixed": 15629,
+    "gauc": 0.5789971922146567,
+    "gauc_w": 0.593141464909695,
+    "ndcg@5": 0.7461939291797034,
+    "skip@5": 0.2927043579756331,
+    "ndcg@10": 0.7675883787572818,
+    "skip@10": 0.3018517229376958,
+    "predict_seconds": 3.675903081893921
+  }
+}

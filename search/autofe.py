@@ -15,7 +15,7 @@
 """
 import os
 
-os.environ.setdefault("POLARS_MAX_THREADS", "4")
+os.environ.setdefault("POLARS_MAX_THREADS", "2")
 import argparse
 import gc
 import json
@@ -44,7 +44,14 @@ ap.add_argument("--pool_ll", type=int, default=15, help="лучших по LogLo
 ap.add_argument("--pool_gauc", type=int, default=8, help="лучших по GAUC от каждой сущности")
 ap.add_argument("--corr", type=float, default=0.97)
 ap.add_argument("--delta", type=float, default=1e-4, help="минимальное улучшение LogLoss на sval")
-ap.add_argument("--threads", type=int, default=4)
+ap.add_argument("--threads", type=int, default=2, help="потоки LightGBM (меньше = тише и холоднее)")
+ap.add_argument("--pool_mode", default="entity", choices=["entity", "family"],
+                help="entity: топ от каждой сущности; family: топ от каждого семейства «вид:сущность:статистика» (разнообразнее)")
+ap.add_argument("--per_family", type=int, default=2, help="family: сколько окон брать от семейства по LL и по GAUC")
+ap.add_argument("--order_by", default="dll", choices=["dll", "gauc"], help="порядок очереди в пуле")
+ap.add_argument("--criterion", default="ll", choices=["ll", "gauc"], help="критерий принятия признака в forward")
+ap.add_argument("--pool_tag", default="", help="какой пул брать в forward (суффикс файла)")
+ap.add_argument("--tag", default="", help="суффикс файлов результата (pool_<tag>.csv, forward_<start><tag>.jsonl)")
 args = ap.parse_args()
 
 OUT = ROOT / "reports/auto"
@@ -148,17 +155,21 @@ if run("screen"):
         gc.collect()
 
 # ------------------------------------------------------------------ pool
-POOL = OUT / "pool.csv"
+POOL = OUT / f"pool{args.tag if args.stage == 'pool' else args.pool_tag}.csv"
 if run("pool"):
     sc = pl.read_csv(SCREEN).filter(pl.col("dll") > 0)
+    # семейство = признак без окна: rate:ui:full/n:30 -> rate:ui:full/n
+    sc = sc.with_columns(pl.col("spec").map_elements(lambda x: ":".join(x.split(":")[:3]), return_dtype=pl.String).alias("family"))
+    grp, k_ll, k_g = ("ent", args.pool_ll, args.pool_gauc) if args.pool_mode == "entity" else ("family", args.per_family, args.per_family)
     sel = []
-    for ent in sc["ent"].unique().to_list():
-        e = sc.filter(pl.col("ent") == ent)
-        sel += e.sort("dll", descending=True).head(args.pool_ll)["spec"].to_list()
-        sel += e.sort("gauc", descending=True).head(args.pool_gauc)["spec"].to_list()
+    for g in sc[grp].unique().to_list():
+        e = sc.filter(pl.col(grp) == g)
+        sel += e.sort("dll", descending=True).head(k_ll)["spec"].to_list()
+        sel += e.sort("gauc", descending=True).head(k_g)["spec"].to_list()
     cand = sc.filter(pl.col("spec").is_in(list(set(sel))))
-    # очередь: по кругу между сущностями, внутри сущности — по убыванию выигрыша в LogLoss
-    cand = cand.with_columns(pl.col("dll").rank("ordinal", descending=True).over("ent").alias("r")).sort(["r", "dll"], descending=[False, True])
+    # очередь: по кругу между группами, внутри группы — по убыванию выбранного показателя
+    key = args.order_by
+    cand = cand.with_columns(pl.col(key).rank("ordinal", descending=True).over(grp).alias("r")).sort(["r", key], descending=[False, True])
     order = cand["spec"].to_list()
     # ранги на подвыборке для корреляции Спирмена; сравниваем и между собой, и с ручными признаками
     trp = lab.filter(pl.col("part") == "train")
@@ -194,48 +205,58 @@ if run("forward"):
         pool = pool.filter(~pl.col("dup_hand"))
     queue = pool["spec"].to_list()
     base = list(HANDCRAFTED) if args.start == "hand" else []
-    need = base + queue
-    # матрица всех нужных столбцов для train/sval/hval
-    df = lab.select("imp_id")
-    by_file = {}
-    for s in queue:
-        by_file.setdefault("static" if s.startswith("static") else parse(s)["ent"], []).append(s)
-    for f, sp in by_file.items():
-        df = df.join(pl.read_parquet(FS / f"{f}.parquet", columns=["imp_id"] + sp), on="imp_id", how="left", maintain_order="left")
-    if base:
-        df = df.join(pl.read_parquet(CACHE / "set_handcrafted.parquet", columns=["imp_id"] + base), on="imp_id",
-                     how="left", maintain_order="left")
+    # Память: держим в RAM только столбцы текущего набора, кандидата читаем с диска по одному.
+    # (Раньше вся матрица пула 1.4 млн x 400 признаков собиралась сразу — это ~7 ГБ на пике.)
     parts = lab["part"].to_numpy()
-    X = {p: df.filter(pl.Series(parts == p)).select(need).to_numpy().astype(np.float32) for p in ["train", "sval", "hval"]}
-    idx = {s: i for i, s in enumerate(need)}
-    del df
+    masks = {p: parts == p for p in ["train", "sval", "hval"]}
+    lab_ids = lab["imp_id"].to_numpy()
+    for f in set(["static"] + [parse(x)["ent"] for x in queue if not x.startswith("static")]):
+        ids = pl.read_parquet(FS / f"{f}.parquet", columns=["imp_id"])["imp_id"].to_numpy()
+        assert np.array_equal(ids, lab_ids), f"порядок строк в {f}.parquet не совпадает с выборкой"
+
+    def split_parts(x):
+        return {p: np.ascontiguousarray(x[m], dtype=np.float32) for p, m in masks.items()}
+
+    def load_col(spec):
+        f = "static" if spec.startswith("static") else parse(spec)["ent"]
+        return split_parts(pl.read_parquet(FS / f"{f}.parquet", columns=[spec])[spec].cast(pl.Float32).to_numpy())
+
+    cols = {}
+    if base:
+        hb = lab.select("imp_id").join(pl.read_parquet(CACHE / "set_handcrafted.parquet", columns=["imp_id"] + base),
+                                       on="imp_id", how="left", maintain_order="left")
+        for b in base:
+            cols[b] = split_parts(hb[b].cast(pl.Float32).to_numpy())
+        del hb
     gc.collect()
     params = dict(objective="binary", learning_rate=0.1, num_leaves=63, min_data_in_leaf=200, max_bin=255,
                   feature_fraction=1.0, bagging_fraction=1.0, lambda_l2=1.0, verbose=-1, num_threads=args.threads,
                   seed=0, deterministic=True, force_row_wise=True)
 
-    def fit(cols):
+    def fit(names):
         t0 = time.time()
-        if not cols:
+        if not names:
             p = {k: np.full(len(y[k]), y["train"].mean()) for k in ("sval", "hval")}
             it = 0
         else:
-            c = [idx[s] for s in cols]
-            dtr = lgb.Dataset(X["train"][:, c], y["train"])
-            dsv = lgb.Dataset(X["sval"][:, c], y["sval"], reference=dtr)
+            X = {k: np.column_stack([cols[s][k] for s in names]) for k in ("train", "sval", "hval")}
+            dtr = lgb.Dataset(X["train"], y["train"], free_raw_data=True)
+            dsv = lgb.Dataset(X["sval"], y["sval"], reference=dtr)
             m = lgb.train(params, dtr, 500, valid_sets=[dsv], callbacks=[lgb.early_stopping(30, verbose=False)])
-            p = {k: m.predict(X[k][:, c], num_iteration=m.best_iteration) for k in ("sval", "hval")}
+            p = {k: m.predict(X[k], num_iteration=m.best_iteration) for k in ("sval", "hval")}
+            del X, dtr, dsv
             it = m.best_iteration
-        return {"n": len(cols), "iters": it, "sec": time.time() - t0,
+        return {"n": len(names), "iters": it, "sec": time.time() - t0,
                 **{f"{k}_ll": float(log_loss(y[k], p[k])) for k in ("sval", "hval")},
                 **{f"{k}_gauc": gauc(k, p[k]) for k in ("sval", "hval")}}
 
-    LOG = OUT / f"forward_{args.start}.jsonl"
+    LOG = OUT / f"forward_{args.start}{args.tag}.jsonl"
     hist = [json.loads(l) for l in open(LOG)] if LOG.exists() else []
     cur = list(base)
     for h in hist:
-        if h.get("accepted"):
+        if h.get("accepted") and h["spec"] != "<start>":
             cur.append(h["spec"])
+            cols[h["spec"]] = load_col(h["spec"])
     tried = {h["spec"] for h in hist}
     if not hist:
         r0 = fit(cur)
@@ -248,16 +269,23 @@ if run("forward"):
     for s in queue:
         if s in tried or s in cur:
             continue
+        cols[s] = load_col(s)
         r = fit(cur + [s])
         r["spec"] = s
-        r["accepted"] = best["sval_ll"] - r["sval_ll"] > args.delta
+        if args.criterion == "ll":
+            r["accepted"] = best["sval_ll"] - r["sval_ll"] > args.delta
+        else:  # GAUC: порядок треков внутри дня пользователя
+            r["accepted"] = r["sval_gauc"] - best["sval_gauc"] > args.delta
         if r["accepted"]:
             cur.append(s)
             best = r
+        else:
+            del cols[s]
+        gc.collect()
         open(LOG, "a").write(json.dumps(r) + "\n")
         print(f"{'+' if r['accepted'] else ' '} {s:32s} n={len(cur):3d}  sval LL={r['sval_ll']:.5f} GAUC={r['sval_gauc']:.4f}"
               f"  | hval GAUC={r['hval_gauc']:.4f}  ({r['sec']:.0f} с)")
-    save_cost(f"forward_{args.start}", time.time() - t_all)
+    save_cost(f"forward_{args.start}{args.tag}", time.time() - t_all)
     sel = [s for s in cur]
-    open(OUT / f"selected_{args.start}.txt", "w", encoding="utf-8").write("\n".join(sel) + "\n")
-    print(f"отобрано признаков: {len(sel)} -> reports/auto/selected_{args.start}.txt")
+    open(OUT / f"selected_{args.start}{args.tag}.txt", "w", encoding="utf-8").write("\n".join(sel) + "\n")
+    print(f"отобрано признаков: {len(sel)} -> reports/auto/selected_{args.start}{args.tag}.txt")

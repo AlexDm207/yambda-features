@@ -1,0 +1,39 @@
+{
+  "name": "seq_L512",
+  "objective": "transformer",
+  "n_features": 0,
+  "args": {
+    "name": "seq_L512",
+    "L": 512,
+    "C": 64,
+    "d": 128,
+    "layers": 2,
+    "epochs": 4,
+    "bs": 64,
+    "lr": 0.001,
+    "train_last_days": 0,
+    "seed": 42,
+    "test": false,
+    "eval_only": false,
+    "throttle": 0.05,
+    "threads": 2,
+    "shuffle_train_labels": false
+  },
+  "feature_seconds": 2.516500949859619,
+  "best_epoch": 0,
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.45981128930631604,
+    "auc": 0.8265150298733019,
+    "groups_mixed": 15629,
+    "gauc": 0.5435062854905397,
+    "gauc_w": 0.5549957934843142,
+    "ndcg@5": 0.7095815038652481,
+    "skip@5": 0.3241006675322291,
+    "ndcg@10": 0.7360891102101412,
+    "skip@10": 0.3253811347024017
+  },
+  "train_seconds": 1694.1761469841003,
+  "gpu_mem_gb": 1.087349248
+}

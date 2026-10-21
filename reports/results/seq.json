@@ -1,0 +1,39 @@
+{
+  "name": "seq",
+  "objective": "transformer",
+  "n_features": 0,
+  "args": {
+    "name": "seq",
+    "L": 256,
+    "C": 64,
+    "d": 128,
+    "layers": 2,
+    "epochs": 4,
+    "bs": 128,
+    "lr": 0.001,
+    "train_last_days": 0,
+    "seed": 42,
+    "test": false,
+    "eval_only": false,
+    "throttle": 0.05,
+    "threads": 2,
+    "shuffle_train_labels": false
+  },
+  "feature_seconds": 3.452615737915039,
+  "best_epoch": 0,
+  "val": {
+    "n": 734470,
+    "pos_rate": 0.6922297711274796,
+    "logloss": 0.4668326462119771,
+    "auc": 0.8204662394707842,
+    "groups_mixed": 15629,
+    "gauc": 0.5384728322999552,
+    "gauc_w": 0.5493181589177615,
+    "ndcg@5": 0.7060416028905647,
+    "skip@5": 0.32723505265504715,
+    "ndcg@10": 0.7332740943143199,
+    "skip@10": 0.3274068917507832
+  },
+  "train_seconds": 812.7362568378448,
+  "gpu_mem_gb": 1.031000064
+}

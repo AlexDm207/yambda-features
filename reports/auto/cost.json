@@ -9,5 +9,7 @@
   "features_static": 0.935805082321167,
   "screen": 610.9178137779236,
   "forward_scratch": 334.1463232040405,
-  "forward_hand": 618.246737241745
+  "forward_hand": 618.246737241745,
+  "forward_scratch_fam_gauc": 964.1103284358978,
+  "forward_hand_fam_gauc": 4490.90004491806
 }

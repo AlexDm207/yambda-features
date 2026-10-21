@@ -1,0 +1,4 @@
+sum:ui:full:inf
+sum:ua:rec:90
+static:length
+sum:u:rec:1
